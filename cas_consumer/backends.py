@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger('cas.consumer')
+
 from urllib import urlencode, urlopen
 from urlparse import urljoin
 
@@ -27,6 +30,7 @@ def _verify_cas1(ticket, service):
     else:
         raw_params = ['%s=%s' % (key, value) for key, value in params.items()]
         url += '&'.join(raw_params)
+    logger.info('Validating at %s', url)
     page = urlopen(url)
     try:
         verified = page.readline().strip()
@@ -34,6 +38,8 @@ def _verify_cas1(ticket, service):
             return page.readline().strip()
         else:
             return None
+    except Exception as e:
+        logger.exception('Validation encountered an error:')
     finally:
         page.close()
 
