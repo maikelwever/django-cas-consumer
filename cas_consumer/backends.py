@@ -1,65 +1,53 @@
+# -*- coding: utf-8 -*-
+"""cas_consumer.backends -- authentication backend for CAS v1.0
+"""
 import logging
 logger = logging.getLogger('cas.consumer')
 
-from urllib import urlencode, urlopen
+import urllib
 from urlparse import urljoin
 
 from django.conf import settings
 
 from django.contrib.auth.models import User, UNUSABLE_PASSWORD
 
+from . import signals
+
+
 __all__ = ['CASBackend']
 
-service = settings.CAS_SERVICE
-cas_base = settings.CAS_BASE
-cas_login = cas_base + settings.CAS_LOGIN_URL
-cas_validate = cas_base + settings.CAS_VALIDATE_URL
-cas_logout = cas_base + settings.CAS_LOGOUT_URL
-cas_next_default = settings.CAS_NEXT_DEFAULT
-
-def _verify_cas1(ticket, service):
-    """Verifies CAS 1.0 authentication ticket.
-
-    Returns username on success and None on failure.
-    """
-    params = settings.CAS_EXTRA_VALIDATION_PARAMS
-    params.update({settings.CAS_TICKET_LABEL: ticket, settings.CAS_SERVICE_LABEL: service})
-    url = cas_validate + '?'
-    if settings.CAS_URLENCODE_PARAMS:
-        url += urlencode(params)
-    else:
-        raw_params = ['%s=%s' % (key, value) for key, value in params.items()]
-        url += '&'.join(raw_params)
-    logger.info('Validating at %s', url)
-    page = urlopen(url)
-    try:
-        verified = page.readline().strip()
-        if verified == 'yes':
-            return page.readline().strip()
-        else:
-            return None
-    except Exception as e:
-        logger.exception('Validation encountered an error:')
-    finally:
-        page.close()
 
 class CASBackend(object):
     """CAS authentication backend"""
+    service = getattr(settings, 'CAS_SERVICE', None)
+    cas_base = getattr(settings, 'CAS_BASE', '')
+    cas_login = cas_base + getattr(settings, 'CAS_LOGIN_URL', '/cas/login/')
+    cas_validate = cas_base + getattr(settings, 'CAS_VALIDATE_URL', '/cas/validate/')
+    cas_logout = cas_base + getattr(settings, 'CAS_LOGOUT_URL', '/cas/logout/')
+    cas_next_default = getattr(settings, 'CAS_NEXT_DEFAULT', None)
+
+    extra_validation_params = getattr(settings, 'CAS_EXTRA_VALIDATION_PARAMS', {})
+    encode_params = getattr(settings, 'CAS_URLENCODE_PARAMS', True)
 
     def authenticate(self, ticket, service):
         """Verifies CAS ticket and gets or creates User object"""
-
-        username = _verify_cas1(ticket, service)
-        if not username:
+        usernames = self._verify_cas1(ticket, service)
+        if not usernames:
             return None
-        try:
-            user = User.objects.get(username=username)
-        except User.DoesNotExist:
+        users = list(User.objects.filter(username__in=usernames))
+
+        if users:
+            user = users[0]
+        else:
             # user will have an "unusable" password (thanks to James Bennett)
-            user = User.objects.create_user(username, UNUSABLE_PASSWORD)
+            user = User.objects.create_user(usernames[0], UNUSABLE_PASSWORD)
             user.save()
-        if settings.CAS_USERINFO_CALLBACK is not None:
-            settings.CAS_USERINFO_CALLBACK(user)
+
+        if len(users) > 1:
+            signals.on_cas_merge_users.send(sender=self, primary=user, others=users[1:])
+
+        logger.debug('Authenticated user: %s' % user)
+        signals.on_cas_authentication.send(sender=self, user=user)
         return user
 
     def get_user(self, user_id):
@@ -68,3 +56,33 @@ class CASBackend(object):
             return User.objects.get(pk=user_id)
         except User.DoesNotExist:
             return None
+
+    def _verify_cas1(self, ticket, service):
+        """Verifies CAS 1.0 authentication ticket.
+
+        Returns validated username(s) on success and None on failure.
+        """
+        params = dict(self.extra_validation_params)
+        params.update({getattr(settings, 'CAS_TICKET_LABEL', 'ticket'): ticket,
+                       getattr(settings, 'CAS_SERVICE_LABEL', 'service'): service})
+        url = self.cas_validate + '?'
+        if self.encode_params:
+            url += urllib.urlencode(params)
+        else:
+            raw_params = ['%s=%s' % (key, value) for key, value in params.items()]
+            url += '&'.join(raw_params)
+        logger.info('Validating at %s', url)
+
+        page = urllib.urlopen(url)
+        try:
+            verified = page.readline().strip()
+            if verified == 'yes':
+                usernames = [u.strip() for u in page.readlines() if u.strip()]
+                logger.debug('Verified %s usernames: %s' % (len(usernames), usernames))
+                return usernames
+        except Exception:
+            logger.exception('Validation encountered an error:')
+        finally:
+            page.close()
+
+        return []
