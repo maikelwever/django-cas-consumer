@@ -3,11 +3,10 @@ from setuptools import setup, find_packages
  
 setup(
     name='django-cas-consumer',
-    version='0.1dev',
-    description='A "consumer" for the Central Authentication Service (http://jasig.org/cas)',
-    author='Chris Williams',
-    author_email='chris@nitron.org',
-    url='http://nitron.org/',
+    version='0.2',
+    description='A "consumer" for a modified version of the the Central Authentication Service protocol (http://jasig.org/cas)',
+    author='David Eyk & Derek Wickwire (original by Chris Williams)',
+    author_email='deyk@crossway.org',
     packages=find_packages(),
     zip_safe=False,
     install_requires=['setuptools'],
