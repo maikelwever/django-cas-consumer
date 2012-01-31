@@ -39,7 +39,7 @@ class CASBackend(object):
         if users:
             user = users[0]
         else:
-            user = User(usernames[0])
+            user = User(username=usernames[0])
             user.set_unusable_password()
             user.save()
 
