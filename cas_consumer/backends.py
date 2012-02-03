@@ -31,6 +31,7 @@ class CASBackend(object):
 
     def authenticate(self, ticket, service):
         """Verifies CAS ticket and gets or creates User object"""
+        logger.info('Authenticating against CAS: service = %s ; ticket = %s', service, ticket)
         usernames = self._verify_cas1(ticket, service)
         if not usernames:
             return None
