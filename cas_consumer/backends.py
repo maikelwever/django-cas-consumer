@@ -36,18 +36,21 @@ class CASBackend(object):
         if not usernames:
             return None
         users = list(User.objects.filter(username__in=usernames))
-
+        logger.info('Authentication turned up %s users: %s', len(users), users)
         if users:
             user = users[0]
+            logger.info('Picking primary user: %s', user)
         else:
+            logger.info('Creating new user for %s', usernames[0])
             user = User(username=usernames[0])
             user.set_unusable_password()
             user.save()
 
         if len(users) > 1:
+            logger.info('Sending merge signal for other users: %s', users[1:])
             signals.on_cas_merge_users.send(sender=self, primary=user, others=users[1:])
 
-        logger.debug('Authenticated user: %s' % user)
+        logger.info('Authenticated user: %s' % user)
         signals.on_cas_authentication.send(sender=self, user=user)
         return user
 
