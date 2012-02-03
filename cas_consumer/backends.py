@@ -48,7 +48,12 @@ class CASBackend(object):
 
         if len(users) > 1:
             logger.info('Sending merge signal for other users: %s', users[1:])
-            signals.on_cas_merge_users.send(sender=self, primary=user, others=users[1:])
+            try:
+                result = signals.on_cas_merge_users.send(sender=self, primary=user, others=users[1:])
+            except Exception:
+                logger.exception('Merge signal failed!')
+            else:
+                logger.info('Sent merge signal. Result: %s', result)
 
         logger.info('Authenticated user: %s' % user)
         signals.on_cas_authentication.send(sender=self, user=user)
