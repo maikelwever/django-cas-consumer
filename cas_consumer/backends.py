@@ -77,9 +77,10 @@ class CASBackend(object):
         page = urllib.urlopen(url)
         try:
             verified = page.readline().strip()
+            logger.info('Result: %s', verified)
             if verified == 'yes':
                 usernames = [u.strip() for u in page.readlines() if u.strip()]
-                logger.debug('Verified %s usernames: %s' % (len(usernames), usernames))
+                logger.info('Verified %s usernames: %s' % (len(usernames), usernames))
                 return usernames
         except Exception:
             logger.exception('Validation encountered an error:')
