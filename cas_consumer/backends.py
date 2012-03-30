@@ -4,7 +4,9 @@
 import logging
 logger = logging.getLogger('cas.consumer')
 
-import urllib
+import urllib2, urllib, gzip
+from cStringIO import StringIO
+
 from urlparse import urljoin
 
 from django.conf import settings
@@ -82,7 +84,14 @@ class CASBackend(object):
             url += '&'.join(raw_params)
         logger.info('Validating at %s', url)
 
-        page = urllib.urlopen(url)
+        request = urllib2.Request(url)
+        request.add_header('Accept-encoding', 'gzip')
+        page = urllib2.urlopen(request)
+
+        if page.info().get('Content-Encoding') == 'gzip':
+            buf = StringIO( page.read())
+            page = gzip.GzipFile(fileobj=buf)
+
         try:
             verified = page.readline().strip()
             logger.info('Result: %s', verified)
