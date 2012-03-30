@@ -5,7 +5,11 @@ import logging
 logger = logging.getLogger('cas.consumer')
 
 import urllib2, urllib, gzip
-from cStringIO import StringIO
+
+try: 
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
 
 from urlparse import urljoin
 
