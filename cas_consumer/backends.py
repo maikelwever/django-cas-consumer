@@ -4,18 +4,23 @@
 import logging
 logger = logging.getLogger('cas.consumer')
 
-import urllib2, urllib, gzip
+import urllib2
+import urllib
+import gzip
+
+try:
+    from xml.etree import ElementTree
+except ImportError:
+    from elementtree import ElementTree
 
 try: 
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
 
-from urlparse import urljoin
-
 from django.conf import settings
 
-from django.contrib.auth.models import User, UNUSABLE_PASSWORD
+from django.contrib.auth.models import User
 
 from . import signals
 
@@ -23,32 +28,154 @@ from . import signals
 __all__ = ['CASBackend']
 
 
-class CASBackend(object):
-    """CAS authentication backend"""
+class _CASValidation(object):
+    """Base class for CAS validation, non-protocol-specific.
+    """
     service = getattr(settings, 'CAS_SERVICE', None)
     cas_base = getattr(settings, 'CAS_BASE', '')
     cas_login = cas_base + getattr(settings, 'CAS_LOGIN_URL', '/cas/login/')
-    cas_validate = cas_base + getattr(settings, 'CAS_VALIDATE_URL', '/cas/validate/')
     cas_logout = cas_base + getattr(settings, 'CAS_LOGOUT_URL', '/cas/logout/')
     cas_next_default = getattr(settings, 'CAS_NEXT_DEFAULT', None)
 
     extra_validation_params = getattr(settings, 'CAS_EXTRA_VALIDATION_PARAMS', {})
     encode_params = getattr(settings, 'CAS_URLENCODE_PARAMS', True)
 
+    def __init__(self, service, ticket):
+        params = dict(self.extra_validation_params)
+        params.update({getattr(settings, 'CAS_TICKET_LABEL', 'ticket'): ticket,
+                       getattr(settings, 'CAS_SERVICE_LABEL', 'service'): service})
+        url = self.cas_validate + '?'
+        if self.encode_params:
+            url += urllib.urlencode(params)
+        else:
+            raw_params = ['%s=%s' % (key, value) for key, value in params.items()]
+            url += '&'.join(raw_params)
+
+        try:
+            request = urllib2.Request(url)
+            request.add_header('Accept-encoding', 'gzip')
+            page = urllib2.urlopen(request)
+            buf = StringIO(page.read())
+
+            if page.info().get('Content-Encoding') == 'gzip':
+                buf = gzip.GzipFile(fileobj=buf)
+
+            self._buf = buf
+        except Exception:
+            logger.exception('Validation encountered an error:')
+            raise
+        finally:
+            page.close()
+
+    def __bool__(self):
+        return self.success
+
+    @property
+    def _not_implemented(self):
+        raise NotImplementedError()
+
+    success = _not_implemented
+    username = _not_implemented
+    identifiers = _not_implemented
+    attributes = _not_implemented
+
+
+class CAS1Validation(_CASValidation):
+    cas_validate = _CASValidation.cas_base + getattr(settings, 'CAS1_VALIDATE_URL', getattr(settings, 'CAS_VALIDATE_URL', '/cas/validate/'))
+
+    @property
+    def success(self):
+        if not hasattr(self, '_success'):
+            self._buf.seek(0)
+            self._success = self._buf.readline().strip() == 'yes'
+            logger.info('Result: %s', self._success)
+        return self._success
+
+    @property
+    def username(self):
+        if not hasattr(self, '_username'):
+            if self.success:
+                self._username = self._buf.readline().strip()
+            else:
+                self._username = None
+        return self._username
+
+    @property
+    def identifiers(self):
+        if not hasattr(self, '_identifiers'):
+            if self.success:
+                self._identifiers = [self.username]
+                self._identifiers.extend(u.strip() for u in self._buf.readlines() if u.strip())
+            else:
+                self._identifiers = []
+        return self._identifiers
+
+
+class CAS2Validation(_CASValidation):
+    cas_validate = _CASValidation.cas_base + getattr(settings, 'CAS2_VALIDATE_URL', '/cas/serviceValidate/')
+
+    CAS_URI = 'http://www.yale.edu/tp/cas'
+    CAS = '{%s}' % CAS_URI
+
+    @property
+    def tree(self):
+        if not hasattr(self, '_tree'):
+            self._buf.seek(0)
+            self._tree = ElementTree.fromstring(self._buf.read())
+        return self._tree
+
+    @property
+    def success(self):
+        if not hasattr(self, '_success'):
+            self._success = (self.tree.find(self.CAS + 'authenticationSuccess') is not None)
+        return self._success
+
+    @property
+    def username(self):
+        if not hasattr(self, '_username'):
+            if self.success:
+                self._username = self.tree.find('{CAS}authenticationSuccess/{CAS}user'.format(CAS=self.CAS)).text
+            else:
+                self._username = None
+        return self._username
+
+    @property
+    def identifiers(self):
+        if not hasattr(self, '_identifiers'):
+            self._identifiers = []
+            if self.success:
+                self._identifiers.append(self.username)
+                for el in self.tree.find('{CAS}authenticationSuccess/{CAS}attributes/{CAS}identifier/'.format(CAS=self.CAS)):
+                    self._identifiers.append(el.text)
+        return self._identifiers
+
+    @property
+    def attributes(self):
+        if not hasattr(self, '_attributes'):
+            self._attributes = {}
+            if self.success:
+                for el in self.tree.find('{CAS}authenticationSuccess/{CAS}attributes/'.format(CAS=self.CAS)):
+                    self._attributes[el.tag.replace(self.CAS, '')] = el.text
+        return self._attributes
+
+
+class CASBackend(object):
+    """CAS authentication backend"""
+
     def authenticate(self, ticket, service):
         """Verifies CAS ticket and gets or creates User object"""
         logger.info('Authenticating against CAS: service = %s ; ticket = %s', service, ticket)
-        usernames = self._verify_cas1(ticket, service)
-        if not usernames:
+        valid = CAS1Validation(ticket, service)
+        if not valid or not valid.identifiers:
             return None
-        users = list(User.objects.filter(username__in=usernames))
+        users = list(User.objects.filter(username__in=valid.identifiers))
         logger.info('Authentication turned up %s users: %s', len(users), users)
         if users:
             user = users[0]
             logger.info('Picking primary user: %s', user)
         else:
-            logger.info('Creating new user for %s', usernames[0])
-            user = User(username=usernames[0])
+            logger.info('Creating new user for %s', valid.username)
+            user = User(username=valid.username)
             user.set_unusable_password()
             user.save()
 
@@ -71,41 +198,3 @@ class CASBackend(object):
             return User.objects.get(pk=user_id)
         except User.DoesNotExist:
             return None
-
-    def _verify_cas1(self, ticket, service):
-        """Verifies CAS 1.0 authentication ticket.
-
-        Returns validated username(s) on success and None on failure.
-        """
-        params = dict(self.extra_validation_params)
-        params.update({getattr(settings, 'CAS_TICKET_LABEL', 'ticket'): ticket,
-                       getattr(settings, 'CAS_SERVICE_LABEL', 'service'): service})
-        url = self.cas_validate + '?'
-        if self.encode_params:
-            url += urllib.urlencode(params)
-        else:
-            raw_params = ['%s=%s' % (key, value) for key, value in params.items()]
-            url += '&'.join(raw_params)
-        logger.info('Validating at %s', url)
-
-        request = urllib2.Request(url)
-        request.add_header('Accept-encoding', 'gzip')
-        page = urllib2.urlopen(request)
-
-        if page.info().get('Content-Encoding') == 'gzip':
-            buf = StringIO( page.read())
-            page = gzip.GzipFile(fileobj=buf)
-
-        try:
-            verified = page.readline().strip()
-            logger.info('Result: %s', verified)
-            if verified == 'yes':
-                usernames = [u.strip() for u in page.readlines() if u.strip()]
-                logger.info('Verified %s usernames: %s' % (len(usernames), usernames))
-                return usernames
-        except Exception:
-            logger.exception('Validation encountered an error:')
-        finally:
-            page.close()
-
-        return []
