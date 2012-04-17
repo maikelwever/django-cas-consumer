@@ -165,7 +165,7 @@ class CASBackend(object):
     def authenticate(self, ticket, service):
         """Verifies CAS ticket and gets or creates User object"""
         logger.info('Authenticating against CAS: service = %s ; ticket = %s', service, ticket)
-        valid = CAS1Validation(ticket, service)
+        valid = CAS1Validation(service, ticket)
         if not valid or not valid.identifiers:
             return None
         users = list(User.objects.filter(username__in=valid.identifiers))

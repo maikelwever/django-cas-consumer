@@ -19,6 +19,7 @@ cas_logout = cas_base + settings.CAS_LOGOUT_URL
 cas_next_default = settings.CAS_NEXT_DEFAULT
 cas_redirect_on_logout = settings.CAS_REDIRECT_ON_LOGOUT
 
+
 def login(request):
     """ Fairly standard login view.
 
@@ -49,6 +50,7 @@ def login(request):
         return HttpResponseRedirect(next_page)
     else:
         return HttpResponseForbidden("Error authenticating with CAS")
+
 
 def logout(request, next_page=cas_redirect_on_logout):
     """ Logs the current user out. If *CAS_COMPLETELY_LOGOUT* is true, redirect to the provider's logout page,
