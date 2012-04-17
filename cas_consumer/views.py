@@ -7,6 +7,7 @@ from django.template import RequestContext
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from django.contrib.auth import login as auth_login, logout as auth_logout
+from django.contrib import messages
 from django.conf import settings
 
 __all__ = ['login', 'logout',]
@@ -45,8 +46,7 @@ def login(request):
         next_page = request.session.get('next', request.session.get('next_page', next_page))
         auth_login(request, user)
         name = user.first_name or user.username
-        message ="Login succeeded. Welcome, %s." % name
-        user.message_set.create(message=message)
+        messages.success(request, "Login succeeded. Welcome, %s." % name)
         return HttpResponseRedirect(next_page)
     else:
         return HttpResponseForbidden("Error authenticating with CAS")
