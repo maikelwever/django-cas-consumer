@@ -160,11 +160,12 @@ class CAS2Validation(_CASValidation):
     @property
     def identifiers(self):
         if not hasattr(self, '_identifiers'):
-            self._identifiers = []
             if self.success:
-                self._identifiers.append(self.username)
+                self._identifiers = [self.username]
                 for el in self.tree.find('{CAS}authenticationSuccess/{CAS}attributes/{CAS}identifier/'.format(CAS=self.CAS)):
                     self._identifiers.append(el.text)
+            else:
+                self._identifiers = []
         return self._identifiers
 
     @property
@@ -191,7 +192,7 @@ class CASBackend(object):
             valid = CAS2Validation(ticket, service)
         else:
             valid = None
-        logger.info('Authenticating against CAS %s: service = %s ; ticket = %s -- %s', self.protocol, service, ticket, valid)
+        logger.info('Authenticating against CAS %s: service = %s ; ticket = %s; identifiers %s\n%s', self.protocol, service, ticket, valid.identifiers, valid)
         if not valid or not valid.identifiers:
             return None
         users = list(User.objects.filter(username__in=valid.identifiers))
