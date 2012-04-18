@@ -83,7 +83,7 @@ class _CASValidation(object):
 
 
 class CAS1Validation(_CASValidation):
-    cas_validate = _CASValidation.cas_base + getattr(settings, 'CAS1_VALIDATE_URL', getattr(settings, 'CAS_VALIDATE_URL', '/cas/validate/'))
+    cas_validate = _CASValidation.cas_base + getattr(settings, 'CAS1_VALIDATE_URL', getattr(settings, 'CAS_VALIDATE_URL', 'validate/'))
 
     @property
     def success(self):
@@ -114,7 +114,7 @@ class CAS1Validation(_CASValidation):
 
 
 class CAS2Validation(_CASValidation):
-    cas_validate = _CASValidation.cas_base + getattr(settings, 'CAS2_VALIDATE_URL', '/cas/serviceValidate/')
+    cas_validate = _CASValidation.cas_base + getattr(settings, 'CAS2_VALIDATE_URL', 'serviceValidate/')
 
     CAS_URI = 'http://www.yale.edu/tp/cas'
     CAS = '{%s}' % CAS_URI
