@@ -40,7 +40,7 @@ class _CASValidation(object):
     extra_validation_params = getattr(settings, 'CAS_EXTRA_VALIDATION_PARAMS', {})
     encode_params = getattr(settings, 'CAS_URLENCODE_PARAMS', True)
 
-    def __init__(self, service, ticket):
+    def __init__(self, ticket, service):
         params = dict(self.extra_validation_params)
         params.update({getattr(settings, 'CAS_TICKET_LABEL', 'ticket'): ticket,
                        getattr(settings, 'CAS_SERVICE_LABEL', 'service'): service})
@@ -167,7 +167,7 @@ class CASBackend(object):
     def authenticate(self, ticket, service):
         """Verifies CAS ticket and gets or creates User object"""
         logger.info('Authenticating against CAS: service = %s ; ticket = %s', service, ticket)
-        valid = CAS1Validation(service, ticket)
+        valid = CAS1Validation(ticket, service)
         if not valid or not valid.identifiers:
             return None
         users = list(User.objects.filter(username__in=valid.identifiers))
