@@ -31,6 +31,7 @@ __all__ = ['CASBackend']
 class _CASValidation(object):
     """Base class for CAS validation, non-protocol-specific.
     """
+    protocol = None
     service = getattr(settings, 'CAS_SERVICE', None)
     cas_base = getattr(settings, 'CAS_BASE', '')
     cas_login = cas_base + getattr(settings, 'CAS_LOGIN_URL', '/cas/login/')
@@ -41,6 +42,8 @@ class _CASValidation(object):
     encode_params = getattr(settings, 'CAS_URLENCODE_PARAMS', True)
 
     def __init__(self, ticket, service):
+        self.ticket = ticket
+        self.service = service
         params = dict(self.extra_validation_params)
         params.update({getattr(settings, 'CAS_TICKET_LABEL', 'ticket'): ticket,
                        getattr(settings, 'CAS_SERVICE_LABEL', 'service'): service})
@@ -72,6 +75,9 @@ class _CASValidation(object):
     def __bool__(self):
         return self.success
 
+    def __str__(self):
+        return "<CAS %s via %s / %s: %s>" % (self.protocol, self.url, self.ticket, self.success)
+
     @property
     def _not_implemented(self):
         raise NotImplementedError()
@@ -85,6 +91,7 @@ class _CASValidation(object):
 class CAS1Validation(_CASValidation):
     """CAS 1.0 validation
     """
+    protocol = 1.0
     cas_validate = _CASValidation.cas_base + getattr(settings, 'CAS1_VALIDATE_URL', getattr(settings, 'CAS_VALIDATE_URL', 'validate/'))
 
     @property
@@ -122,6 +129,7 @@ class CAS1Validation(_CASValidation):
 class CAS2Validation(_CASValidation):
     """CAS 2.0 validation
     """
+    protocol = 2.0
     cas_validate = _CASValidation.cas_base + getattr(settings, 'CAS2_VALIDATE_URL', 'serviceValidate/')
 
     CAS_URI = 'http://www.yale.edu/tp/cas'
@@ -177,13 +185,13 @@ class CASBackend(object):
     
     def authenticate(self, ticket, service):
         """Verifies CAS ticket and gets or creates User object"""
-        logger.info('Authenticating against CAS: service = %s ; ticket = %s', service, ticket)
         if self.protocol == 1:
             valid = CAS1Validation(ticket, service)
         elif self.protocol == 2:
             valid = CAS2Validation(ticket, service)
         else:
             valid = None
+        logger.info('Authenticating against CAS %s: service = %s ; ticket = %s -- %s', self.protocol, service, ticket, valid)
         if not valid or not valid.identifiers:
             return None
         users = list(User.objects.filter(username__in=valid.identifiers))
