@@ -11,4 +11,4 @@ on_cas_merge_users = dispatch.Signal(providing_args=["primary", "others"])
 
 
 # Sent when a user has been successfully authenticated by CAS.
-on_cas_authentication = dispatch.Signal(providing_args=['user'])
+on_cas_authentication = dispatch.Signal(providing_args=['user', 'attributes'])

@@ -83,6 +83,8 @@ class _CASValidation(object):
 
 
 class CAS1Validation(_CASValidation):
+    """CAS 1.0 validation
+    """
     cas_validate = _CASValidation.cas_base + getattr(settings, 'CAS1_VALIDATE_URL', getattr(settings, 'CAS_VALIDATE_URL', 'validate/'))
 
     @property
@@ -112,8 +114,14 @@ class CAS1Validation(_CASValidation):
                 self._identifiers = []
         return self._identifiers
 
+    @property
+    def attributes(self):
+        return {}
+
 
 class CAS2Validation(_CASValidation):
+    """CAS 2.0 validation
+    """
     cas_validate = _CASValidation.cas_base + getattr(settings, 'CAS2_VALIDATE_URL', 'serviceValidate/')
 
     CAS_URI = 'http://www.yale.edu/tp/cas'
@@ -162,12 +170,20 @@ class CAS2Validation(_CASValidation):
 
 
 class CASBackend(object):
-    """CAS authentication backend"""
-
+    """CAS authentication backend
+    """
+    protocol = getattr(settings, 'CAS_VALIDATION_PROTOCOL', 2)
+    set_email = getattr(settings, 'CAS_SET_EMAIL_FROM_ATTRIBUTE', True)
+    
     def authenticate(self, ticket, service):
         """Verifies CAS ticket and gets or creates User object"""
         logger.info('Authenticating against CAS: service = %s ; ticket = %s', service, ticket)
-        valid = CAS1Validation(ticket, service)
+        if self.protocol == 1:
+            valid = CAS1Validation(ticket, service)
+        elif self.protocol == 2:
+            valid = CAS2Validation(ticket, service)
+        else:
+            valid = None
         if not valid or not valid.identifiers:
             return None
         users = list(User.objects.filter(username__in=valid.identifiers))
@@ -175,10 +191,15 @@ class CASBackend(object):
         if users:
             user = users[0]
             logger.info('Picking primary user: %s', user)
+            if self.set_email and 'email' in valid.attributes and valid.attributes['email'] != user.email:
+                user.email = valid.attributes['email']
+                user.save()
         else:
             logger.info('Creating new user for %s', valid.username)
             user = User(username=valid.username)
             user.set_unusable_password()
+            if self.set_email and 'email' in valid.attributes:
+                user.email = valid.attributes['email']
             user.save()
 
         if len(users) > 1:
@@ -191,7 +212,8 @@ class CASBackend(object):
                 logger.info('Sent merge signal. Result: %s', result)
 
         logger.info('Authenticated user: %s' % user)
-        signals.on_cas_authentication.send(sender=self, user=user)
+            
+        signals.on_cas_authentication.send(sender=self, user=user, attributes=valid.attributes)
         return user
 
     def get_user(self, user_id):
