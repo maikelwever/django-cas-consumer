@@ -59,13 +59,15 @@ class _CASValidation(object):
 
             if page.info().get('Content-Encoding') == 'gzip':
                 buf = gzip.GzipFile(fileobj=buf)
-
-            self._buf = buf
         except Exception:
             logger.exception('Validation encountered an error:')
             raise
         finally:
             page.close()
+
+        self.url = url
+        self.request = request
+        self._buf = buf
 
     def __bool__(self):
         return self.success
