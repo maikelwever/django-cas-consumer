@@ -162,8 +162,10 @@ class CAS2Validation(_CASValidation):
         if not hasattr(self, '_identifiers'):
             if self.success:
                 self._identifiers = [self.username]
-                for el in self.tree.find('{CAS}authenticationSuccess/{CAS}attributes/{CAS}identifier/'.format(CAS=self.CAS)):
-                    self._identifiers.append(el.text)
+                identifiers = self.tree.find('{CAS}authenticationSuccess/{CAS}attributes/{CAS}identifier/'.format(CAS=self.CAS))
+                if identifiers:
+                    for el in identifiers:
+                        self._identifiers.append(el.text)
             else:
                 self._identifiers = []
         return self._identifiers
