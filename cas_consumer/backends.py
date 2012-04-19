@@ -173,8 +173,10 @@ class CAS2Validation(_CASValidation):
         if not hasattr(self, '_attributes'):
             self._attributes = {}
             if self.success:
-                for el in self.tree.find('{CAS}authenticationSuccess/{CAS}attributes/'.format(CAS=self.CAS)):
-                    self._attributes[el.tag.replace(self.CAS, '')] = el.text
+                xml_attributes = self.tree.find('{CAS}authenticationSuccess/{CAS}attributes/'.format(CAS=self.CAS))
+                if xml_attributes is not None:
+                    for el in xml_attributes:
+                        self._attributes[el.tag.replace(self.CAS, '')] = el.text
         return self._attributes
 
 
