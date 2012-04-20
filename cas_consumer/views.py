@@ -1,16 +1,15 @@
-from django.http import HttpResponse, HttpResponseForbidden, HttpResponseRedirect
-from django.shortcuts import get_object_or_404, render_to_response, get_list_or_404
-from django.contrib.auth.decorators import login_required
-from django.core.urlresolvers import reverse
-from django.core.exceptions import SuspiciousOperation
-from django.template import RequestContext
-from django.contrib.auth.models import User
+# -*- coding: utf-8 -*-
+"""cas_consumer.views -- authentication views for the CAS consumer.
+"""
+import urlparse
+from django.http import HttpResponseForbidden, HttpResponseRedirect
 from django.contrib.auth import authenticate
+from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth import login as auth_login, logout as auth_logout
 from django.contrib import messages
 from django.conf import settings
 
-__all__ = ['login', 'logout',]
+__all__ = ['login', 'logout']
 
 service = settings.CAS_SERVICE
 cas_base = settings.CAS_BASE
@@ -21,7 +20,7 @@ cas_next_default = settings.CAS_NEXT_DEFAULT
 cas_redirect_on_logout = settings.CAS_REDIRECT_ON_LOGOUT
 
 
-def login(request):
+def login(request, redirect_field_name=REDIRECT_FIELD_NAME):
     """ Fairly standard login view.
 
         1. Checks request.GET for a service ticket.
@@ -32,22 +31,37 @@ def login(request):
 
     """
     ticket = request.GET.get(settings.CAS_TICKET_LABEL, None)
-    next_page = request.GET.get('next', request.GET.get('next_page', cas_next_default))
+    redirect_to = request.REQUEST.get(redirect_field_name,
+                                      request.session.pop('login_redirect_to', ''))
+    
     if ticket is None:
-        request.session['next_page'] = next_page
+        # Need to obtain a service validation ticket from the CAS provider.
+        request.session['login_redirect_to'] = redirect_to
         params = settings.CAS_EXTRA_LOGIN_PARAMS
         params.update({settings.CAS_SERVICE_LABEL: service})
         url = cas_login + '?'
         raw_params = ['%s=%s' % (key, value) for key, value in params.items()]
         url += '&'.join(raw_params)
         return HttpResponseRedirect(url)
+
     user = authenticate(service=service, ticket=ticket)
     if user is not None:
-        next_page = request.session.get('next', request.session.get('next_page', next_page))
+        netloc = urlparse.urlparse(redirect_to)[1]
+
+        # Use default setting if redirect_to is empty
+        if not redirect_to:
+            redirect_to = settings.LOGIN_REDIRECT_URL
+
+        # Heavier security check -- don't allow redirection to a different
+        # host.
+        elif netloc and netloc != request.get_host():
+            redirect_to = settings.LOGIN_REDIRECT_URL
+        
+        # Okay, security checks complete. Log the user in.
         auth_login(request, user)
         name = user.first_name or user.username
         messages.success(request, "Login succeeded. Welcome, %s." % name)
-        return HttpResponseRedirect(next_page)
+        return HttpResponseRedirect(redirect_to)
     else:
         return HttpResponseForbidden("Error authenticating with CAS")
 
