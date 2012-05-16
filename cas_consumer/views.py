@@ -6,8 +6,11 @@ from django.http import HttpResponseForbidden, HttpResponseRedirect
 from django.contrib.auth import authenticate
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth import login as auth_login, logout as auth_logout
-from django.contrib import messages
 from django.conf import settings
+try:
+    from django.contrib import messages
+except ImportError:
+    messages = None
 
 __all__ = ['login', 'logout']
 
@@ -60,7 +63,8 @@ def login(request, redirect_field_name=REDIRECT_FIELD_NAME):
         # Okay, security checks complete. Log the user in.
         auth_login(request, user)
         name = user.first_name or user.username
-        messages.success(request, "Login succeeded. Welcome, %s." % name)
+        if messages is not None:
+            messages.success(request, "Login succeeded. Welcome, %s." % name)
         return HttpResponseRedirect(redirect_to)
     else:
         return HttpResponseForbidden("Error authenticating with CAS")
