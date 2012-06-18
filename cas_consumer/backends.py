@@ -199,10 +199,20 @@ class CASBackend(object):
         logger.info('Authenticating against CAS %s: service = %s ; ticket = %s; identifiers %s\n%s', self.protocol, service, ticket, valid.identifiers, valid)
         if not valid or not valid.identifiers:
             return None
-        users = list(User.objects.filter(username__in=valid.identifiers))
+        # Select any users that match valid identifiers. Specify an ordering for consistent results.
+        users = list(User.objects.filter(username__in=valid.identifiers).order_by('id'))
         logger.info('Authentication turned up %s users: %s', len(users), users)
         if users:
-            user = users[0]
+            user = None
+            primary = valid.username
+            for potential in users:
+                # Try and pick a user that matches the primary identifier.
+                if potential.username == primary:
+                    user = potential
+                    break
+            if user is None:
+                # Otherwise, pick the first in the result set.
+                user = users[0]
             logger.info('Picking primary user: %s', user)
             if self.set_email and 'email' in valid.attributes and valid.attributes['email'] != user.email:
                 user.email = valid.attributes['email']
