@@ -226,10 +226,11 @@ class CASBackend(object):
             user.save()
 
         if len(users) > 1:
-            logger.info('Sending merge signal for other users: %s', users[1:])
+            others = [u for u in users if u.username != user.username]
+            logger.info('Sending merge signal for other users: %s', others)
             try:
                 result = signals.on_cas_merge_users.send(sender=self, primary=user,
-                                                         others=[u for u in users if u.username != user.username])
+                                                         others=others)
             except Exception:
                 logger.exception('Merge signal failed!')
             else:
