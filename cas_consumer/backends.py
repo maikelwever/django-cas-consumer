@@ -54,6 +54,7 @@ class _CASValidation(object):
             raw_params = ['%s=%s' % (key, value) for key, value in params.items()]
             url += '&'.join(raw_params)
 
+        page = None
         try:
             request = urllib2.Request(url)
             request.add_header('Accept-encoding', 'gzip')
@@ -66,7 +67,8 @@ class _CASValidation(object):
             logger.exception('Validation encountered an error:')
             raise
         finally:
-            page.close()
+            if page is not None:
+                page.close()
 
         self.url = url
         self.request = request
