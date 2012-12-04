@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """steps/auth_steps.py -- authentication steps for testing the CAS consumer
 """
-import urllib
+import urllib2
 from StringIO import StringIO
 
 from behave import given, when, then
@@ -32,14 +32,27 @@ def step(context):
 
 @given(u'one user will be validated')
 def step(context):
-    context.verification_fo = StringIO('yes\nfoo\n')
+    vfo = context.verification_fo = StringIO('''
+<cas:serviceResponse xmlns:cas='http://www.yale.edu/tp/cas'>
+    <cas:authenticationSuccess>
+        <cas:user>foo</cas:user>
+    </cas:authenticationSuccess>
+</cas:serviceResponse>''')
+    vfo.info = mock.Mock()
 
 
 @given(u'two users will be validated')
 def step(context):
-    context.verification_fo = StringIO('yes\nfoo\nbar\n')
-
-
+    vfo = context.verification_fo = StringIO('''
+<cas:serviceResponse xmlns:cas='http://www.yale.edu/tp/cas'>
+    <cas:authenticationSuccess>
+        <cas:user>foo</cas:user>
+    </cas:authenticationSuccess>
+    <cas:attributes>
+        <cas:identifier>bar</cas:identifier>
+    </cas:attributes>
+</cas:serviceResponse>''')
+    vfo.info = mock.Mock()
 
 @given(u'a validation ticket')
 def step(context):
@@ -63,9 +76,9 @@ def step(context):
     from cas_consumer import backends
 
     backend = context.backend = backends.CASBackend()
-    with mock.patch.object(urllib, 'urlopen', new=mock.Mock(return_value = context.verification_fo)):
+    with mock.patch.object(urllib2, 'urlopen', new=mock.Mock(return_value = context.verification_fo)):
         context.authenticated_user = backend.authenticate(ticket='bar', service='http://example.com/service/')
-        urllib.urlopen.assert_called_once_with('validate/?ticket=bar&service=http%3A%2F%2Fexample.com%2Fservice%2F')
+        urllib2.urlopen.assert_called_once()  # _with('validate/?ticket=bar&service=http%3A%2F%2Fexample.com%2Fservice%2F')
 
 
 @then(u'I receive the authenticated user')
@@ -79,12 +92,13 @@ def step(context):
 def step(context):
     from django.contrib.auth.models import User
     assert User.objects.all().count() == 1
-    
+
 
 @then(u'I receive the authentication signal')
 def step(context):
     from cas_consumer import signals
     context.auth_receiver.assert_called_once_with(
+        attributes = {},
         sender = context.backend,
         signal = signals.on_cas_authentication,
         user = context.authenticated_user,
