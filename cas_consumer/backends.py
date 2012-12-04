@@ -218,22 +218,6 @@ class CASBackend(object):
                 user = users[0]
             logger.info('Picking primary user: %s', user)
 
-            changed = False
-            if (self.set_email
-                and 'email' in valid.attributes
-                and valid.attributes['email'] != user.email
-                ):
-                user.email = valid.attributes['email']
-                changed = True
-
-            if (self.set_username
-                and user.username != primary
-                ):
-                user.username = primary
-                changed = True
-
-            if changed:
-                user.save()
         else:
             logger.info('Creating new user for %s', valid.username)
             user = User(username=valid.username)
@@ -252,6 +236,24 @@ class CASBackend(object):
                 logger.exception('Merge signal failed!')
             else:
                 logger.info('Sent merge signal. Result: %s', result)
+
+        if users:
+            changed = False
+            if (self.set_email
+                and 'email' in valid.attributes
+                and valid.attributes['email'] != user.email
+                ):
+                user.email = valid.attributes['email']
+                changed = True
+
+            if (self.set_username
+                and user.username != primary
+                ):
+                user.username = primary
+                changed = True
+
+            if changed:
+                user.save()
 
         logger.info('Authenticated user: %s' % user)
 
