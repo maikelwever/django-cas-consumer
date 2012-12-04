@@ -203,7 +203,7 @@ class CASBackend(object):
         if not valid or not valid.identifiers:
             return None
         # Select any users that match valid identifiers. Specify an ordering for consistent results.
-        users = list(User.objects.filter(username__in=valid.identifiers).order_by('id'))
+        users = list(User.objects.filter(username__in=valid.identifiers, is_active=True).order_by('id'))
         logger.info('Authentication turned up %s users: %s', len(users), users)
         if users:
             user = None
