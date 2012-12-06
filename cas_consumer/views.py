@@ -7,10 +7,6 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth import login as auth_login, logout as auth_logout
 from django.conf import settings
-try:
-    from django.contrib import messages
-except ImportError:
-    messages = None
 
 __all__ = ['login', 'logout']
 
@@ -36,7 +32,7 @@ def login(request, redirect_field_name=REDIRECT_FIELD_NAME):
     ticket = request.GET.get(settings.CAS_TICKET_LABEL, None)
     redirect_to = request.REQUEST.get(redirect_field_name,
                                       request.session.pop('login_redirect_to', ''))
-    
+
     if ticket is None:
         # Need to obtain a service validation ticket from the CAS provider.
         request.session['login_redirect_to'] = redirect_to
@@ -59,12 +55,9 @@ def login(request, redirect_field_name=REDIRECT_FIELD_NAME):
         # host.
         elif netloc and netloc != request.get_host():
             redirect_to = settings.LOGIN_REDIRECT_URL
-        
+
         # Okay, security checks complete. Log the user in.
         auth_login(request, user)
-        name = user.first_name or user.username
-        if messages is not None:
-            messages.success(request, "Login succeeded. Welcome, %s." % name)
         return HttpResponseRedirect(redirect_to)
     else:
         return HttpResponseForbidden("Error authenticating with CAS")
